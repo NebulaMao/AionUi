@@ -890,7 +890,13 @@
     "customAgents": "Özel Ajanlar",
     "custom": "Özel",
     "addCustomAgent": "Özel Ajan Ekle",
-    "customEmpty": "Yapılandırılmış özel ajan yok. Oluşturmak için \"Özel Ajan Ekle\"ye tıklayın."
+    "customEmpty": "Yapılandırılmış özel ajan yok. Oluşturmak için \"Özel Ajan Ekle\"ye tıklayın.",
+    "cliPathTitle": "CLI Yolunu Ayarla — {{name}}",
+    "cliPathTooltip": "CLI yolunu ayarla",
+    "cliPathConfigured": "Özel CLI yolu ayarlandı",
+    "cliPathLabel": "CLI Yolu",
+    "cliPathPlaceholder": "örn. /usr/local/bin/claude",
+    "cliPathHelp": "Ajanın yürütülebilir dosyasının tam yolu. Boş bırakılırsa PATH üzerinden otomatik algılanır."
   },
   "remoteAgent": {
     "title": "Uzak Ajanlar",

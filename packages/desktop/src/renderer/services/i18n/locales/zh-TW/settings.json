@@ -904,7 +904,13 @@
     "customAgents": "自訂 Agents",
     "custom": "自訂",
     "addCustomAgent": "新增自訂 Agent",
-    "customEmpty": "尚無自訂 Agent，點擊「新增自訂 Agent」建立。"
+    "customEmpty": "尚無自訂 Agent，點擊「新增自訂 Agent」建立。",
+    "cliPathTitle": "設定 CLI 路徑 — {{name}}",
+    "cliPathTooltip": "設定 CLI 路徑",
+    "cliPathConfigured": "已設定自訂 CLI 路徑",
+    "cliPathLabel": "CLI 路徑",
+    "cliPathPlaceholder": "例如 /usr/local/bin/claude",
+    "cliPathHelp": "Agent 可執行檔的完整路徑。留空則從 PATH 自動偵測。"
   },
   "remoteAgent": {
     "title": "遠端 Agent",

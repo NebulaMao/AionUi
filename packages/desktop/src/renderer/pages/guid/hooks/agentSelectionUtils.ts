@@ -34,6 +34,49 @@ export async function savePreferredModelId(agentKey: string, model_id: string): 
   }
 }
 
+/**
+ * Save (or clear) a user-specified CLI binary path for a detected ACP agent.
+ *
+ * Persisted under `acp.config[agentKey].cli_path`. An empty/whitespace value
+ * clears the override so the backend falls back to `$PATH` auto-detection.
+ * `aionrs` / `custom` are skipped — their launch contract does not carry a
+ * frontend-supplied `cli_path` (see {@link getAgentCliPath}).
+ */
+export async function saveAgentCliPath(agentKey: string, cliPath: string | undefined): Promise<void> {
+  try {
+    if (agentKey === 'aionrs' || agentKey === 'custom') return;
+    const config = configService.get('acp.config');
+    const backendConfig = config?.[agentKey as string] || {};
+    const trimmed = cliPath?.trim();
+    await configService.set('acp.config', {
+      ...config,
+      [agentKey]: { ...backendConfig, cli_path: trimmed && trimmed.length > 0 ? trimmed : undefined },
+    });
+  } catch {
+    /* silent */
+  }
+}
+
+/**
+ * Read the user-specified CLI binary path override for a detected agent, if any.
+ *
+ * Returns `undefined` for `aionrs` / `custom` (their create path does not
+ * forward `cli_path`) and when no non-empty override is stored. Synchronous —
+ * mirrors the other `acp.config` readers so it can run inside the agent-list
+ * normalisation and conversation-create builders without awaiting.
+ */
+export function getAgentCliPath(agentKey: string): string | undefined {
+  try {
+    if (agentKey === 'aionrs' || agentKey === 'custom') return undefined;
+    const config = configService.get('acp.config');
+    const backendConfig = config?.[agentKey as string] as { cli_path?: string } | undefined;
+    const cliPath = backendConfig?.cli_path;
+    return typeof cliPath === 'string' && cliPath.trim().length > 0 ? cliPath.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Save default aionrs provider/model so the Guid page restores it next session. */
 export async function saveAionrsDefaultModel(provider_id: string, use_model: string): Promise<void> {
   try {

@@ -902,7 +902,13 @@
     "customAgents": "Custom Agents",
     "custom": "Custom",
     "addCustomAgent": "Add Custom Agent",
-    "customEmpty": "No custom agents configured. Click \"Add Custom Agent\" to create one."
+    "customEmpty": "No custom agents configured. Click \"Add Custom Agent\" to create one.",
+    "cliPathTitle": "Set CLI Path — {{name}}",
+    "cliPathTooltip": "Set CLI path",
+    "cliPathConfigured": "Custom CLI path set",
+    "cliPathLabel": "CLI Path",
+    "cliPathPlaceholder": "e.g. /usr/local/bin/claude",
+    "cliPathHelp": "Full path to the agent's executable. Leave empty to auto-detect from your PATH."
   },
   "remoteAgent": {
     "title": "Remote Agents",

@@ -15,8 +15,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import AgentCard from './AgentCard';
 import { AgentHubModal } from './AgentHubModal';
+import DetectedAgentPathModal from './DetectedAgentPathModal';
 import InlineAgentEditor, { type CustomAgentDraft } from './InlineAgentEditor';
-import { getAgentKey } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
+import { getAgentCliPath, getAgentKey } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 
 const LocalAgents: React.FC = () => {
   const { t } = useTranslation();
@@ -32,6 +33,8 @@ const LocalAgents: React.FC = () => {
 
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentMetadata | null>(null);
+  // Detected agent whose CLI-path override is being edited (null = modal closed).
+  const [pathModalAgent, setPathModalAgent] = useState<AgentMetadata | null>(null);
 
   const handleSaveCustomAgent = useCallback(
     async (draft: CustomAgentDraft) => {
@@ -154,14 +157,21 @@ const LocalAgents: React.FC = () => {
         {aionrsAgent && (
           <AgentCard type='detected' agent={aionrsAgent} onGoToChat={() => goToChatWithAgent(aionrsAgent)} />
         )}
-        {otherDetected.map((agent) => (
-          <AgentCard
-            key={agent.backend || agent.agent_type}
-            type='detected'
-            agent={agent}
-            onGoToChat={() => goToChatWithAgent(agent)}
-          />
-        ))}
+        {otherDetected.map((agent) => {
+          // Only ACP agents honour a frontend-supplied cli_path at launch, so
+          // the override editor is offered for those rows only.
+          const supportsCliPath = agent.agent_type === 'acp';
+          return (
+            <AgentCard
+              key={agent.backend || agent.agent_type}
+              type='detected'
+              agent={agent}
+              onGoToChat={() => goToChatWithAgent(agent)}
+              onConfigurePath={supportsCliPath ? () => setPathModalAgent(agent) : undefined}
+              cliPathConfigured={supportsCliPath ? Boolean(getAgentCliPath(agent.backend || agent.agent_type)) : undefined}
+            />
+          );
+        })}
       </div>
       {(!detectedAgents || detectedAgents.length === 0) && (
         <Typography.Text type='secondary' className='block px-16px py-16px text-center text-12px'>
@@ -233,6 +243,12 @@ const LocalAgents: React.FC = () => {
           />
         ))}
       </div>
+
+      <DetectedAgentPathModal
+        agent={pathModalAgent}
+        onClose={() => setPathModalAgent(null)}
+        onSaved={() => void mutateAgents()}
+      />
 
       {hubModalVisible && <AgentHubModal visible={hubModalVisible} onCancel={() => setHubModalVisible(false)} />}
     </div>

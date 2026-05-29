@@ -21,7 +21,7 @@ import {
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { savePreferredMode, savePreferredModelId, getAgentKey as getAgentKeyUtil } from './agentSelectionUtils';
+import { savePreferredMode, savePreferredModelId, getAgentKey as getAgentKeyUtil, getAgentCliPath } from './agentSelectionUtils';
 import { usePresetAssistantResolver } from './usePresetAssistantResolver';
 import { useAgentAvailability } from './useAgentAvailability';
 import { useCustomAgentsLoader } from './useCustomAgentsLoader';
@@ -277,11 +277,17 @@ export const useGuidAgentSelection = ({
     const normalisedDetected: AvailableAgent[] = availableAgentsData.map((a) => {
       const asAgent = a as AgentMetadata;
       const isCustomRow = asAgent.agent_source === 'custom';
+      // User-specified CLI path override (Settings → Agents). When set it is
+      // forwarded as `extra.cli_path` at conversation-create time so the
+      // backend spawns this binary instead of relying on `$PATH` detection.
+      // Custom rows carry their own command, so the override does not apply.
+      const cliPathOverride = isCustomRow ? undefined : getAgentCliPath(asAgent.backend || asAgent.agent_type);
       return {
         ...a,
         id: asAgent.id,
         custom_agent_id: isCustomRow ? asAgent.id : (a as AvailableAgent).custom_agent_id,
         avatar: isCustomRow ? asAgent.icon : (a as AvailableAgent).avatar,
+        cli_path: cliPathOverride ?? (a as AvailableAgent).cli_path,
       };
     });
     const remoteAsAvailable: AvailableAgent[] = (remoteAgentsData || []).map((ra) => ({

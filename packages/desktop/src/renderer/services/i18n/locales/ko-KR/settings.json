@@ -892,7 +892,13 @@
     "customAgents": "커스텀 에이전트",
     "custom": "사용자 정의",
     "addCustomAgent": "사용자 정의 에이전트 추가",
-    "customEmpty": "구성된 사용자 정의 에이전트가 없습니다. \"사용자 정의 에이전트 추가\"를 클릭하여 생성하세요."
+    "customEmpty": "구성된 사용자 정의 에이전트가 없습니다. \"사용자 정의 에이전트 추가\"를 클릭하여 생성하세요.",
+    "cliPathTitle": "CLI 경로 설정 — {{name}}",
+    "cliPathTooltip": "CLI 경로 설정",
+    "cliPathConfigured": "사용자 지정 CLI 경로가 설정됨",
+    "cliPathLabel": "CLI 경로",
+    "cliPathPlaceholder": "예: /usr/local/bin/claude",
+    "cliPathHelp": "에이전트 실행 파일의 전체 경로입니다. 비워 두면 PATH에서 자동으로 감지합니다."
   },
   "remoteAgent": {
     "title": "원격 에이전트",

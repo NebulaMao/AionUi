@@ -739,9 +739,10 @@ export const acpConversation = {
     (p) => `/api/agents/${p.id}/enabled`,
     (p) => ({ enabled: p.enabled })
   ),
-  checkAgentHealth: httpPost<{ available: boolean; latency?: number; error?: string }, { backend: string }>(
-    '/api/agents/health-check'
-  ),
+  checkAgentHealth: httpPost<
+    { available: boolean; latency?: number; error?: string },
+    { backend: string; cli_path?: string }
+  >('/api/agents/health-check'),
   checkProviderHealth: httpPost<ProviderHealthCheckResponse, ProviderHealthCheckRequest>(
     '/api/agents/provider-health-check'
   ),

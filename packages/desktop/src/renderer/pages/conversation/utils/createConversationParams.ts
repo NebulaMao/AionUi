@@ -19,6 +19,7 @@ import {
 } from '@/common/utils/buildAgentConversationParams';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { getAgents } from '@/renderer/hooks/agent/useAgents';
+import { getAgentCliPath } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 import type { AcpModelInfo } from '@/common/types/platform/acpTypes';
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import { hasSpecificModelCapability } from '@/renderer/utils/model/modelCapabilities';
@@ -164,6 +165,8 @@ export async function buildCliAgentParams(agent: AgentMetadata, workspace: strin
   const type = getConversationTypeForBackend(agentKey);
   const preferredMode = await resolvePreferredMode(agentKey);
   const preferredAcpModelId = type === 'acp' ? await resolvePreferredAcpModelId(agentKey) : undefined;
+  // User-specified CLI path override forwarded as `extra.cli_path` (ACP only).
+  const cliPathOverride = type === 'acp' ? getAgentCliPath(agentKey) : undefined;
 
   let model: TProviderWithModel;
   if (type === 'aionrs') {
@@ -180,6 +183,7 @@ export async function buildCliAgentParams(agent: AgentMetadata, workspace: strin
     agent_name: agent.name,
     workspace,
     model,
+    cli_path: cliPathOverride,
     session_mode: preferredMode,
     current_model_id: preferredAcpModelId,
   });

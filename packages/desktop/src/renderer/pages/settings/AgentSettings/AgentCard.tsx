@@ -5,8 +5,8 @@
  */
 
 import React from 'react';
-import { Avatar, Button, Switch, Typography } from '@arco-design/web-react';
-import { Delete, EditTwo, Robot } from '@icon-park/react';
+import { Avatar, Button, Switch, Tooltip, Typography } from '@arco-design/web-react';
+import { Delete, EditTwo, Robot, SettingTwo } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
 import { resolveAgentLogo } from '@/renderer/utils/model/agentLogo';
 import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
@@ -39,6 +39,10 @@ type AgentCardProps =
       type: 'detected';
       agent: DetectedAgent;
       onGoToChat: () => void;
+      /** When provided, renders a gear that opens the CLI-path override editor. */
+      onConfigurePath?: () => void;
+      /** Whether a custom CLI path is currently saved for this agent. */
+      cliPathConfigured?: boolean;
     }
   | {
       type: 'custom';
@@ -54,7 +58,7 @@ const AgentCard: React.FC<AgentCardProps> = (props) => {
   const goToChatButtonClassName = '!w-full !justify-center !rounded-10px !text-12px';
 
   if (props.type === 'detected') {
-    const { agent, onGoToChat } = props;
+    const { agent, onGoToChat, onConfigurePath, cliPathConfigured } = props;
     const extensionAvatar = resolveExtensionAssetUrl(agent.isExtension ? agent.avatar : undefined);
     const logo =
       extensionAvatar ||
@@ -66,7 +70,24 @@ const AgentCard: React.FC<AgentCardProps> = (props) => {
       });
 
     return (
-      <div className='flex min-h-[154px] flex-col rounded-12px border border-solid border-[var(--color-border-2)] bg-[var(--color-bg-2)] p-12px transition-colors hover:border-[var(--color-border-3)]'>
+      <div className='relative flex min-h-[154px] flex-col rounded-12px border border-solid border-[var(--color-border-2)] bg-[var(--color-bg-2)] p-12px transition-colors hover:border-[var(--color-border-3)]'>
+        {onConfigurePath && (
+          <Tooltip
+            content={
+              cliPathConfigured
+                ? t('settings.agentManagement.cliPathConfigured')
+                : t('settings.agentManagement.cliPathTooltip')
+            }
+          >
+            <Button
+              size='mini'
+              type='text'
+              icon={<SettingTwo theme='outline' size='14' />}
+              onClick={onConfigurePath}
+              className={`!absolute !right-4px !top-4px !h-24px !w-24px !rounded-8px !px-0 ${cliPathConfigured ? '!text-primary-6' : 'text-t-tertiary'}`}
+            />
+          </Tooltip>
+        )}
         <div className='mb-10px flex justify-center'>
           <Avatar size={40} shape='square' style={{ flexShrink: 0, backgroundColor: 'transparent' }}>
             {logo ? <img src={logo} alt={agent.name} className='h-full w-full object-contain' /> : '🤖'}

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ipcBridge } from '@/common';
 import { getAgents } from '@/renderer/hooks/agent/useAgents';
+import { getAgentCliPath } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 
 export type AgentCheckResult = {
   backend: string;
@@ -186,6 +187,9 @@ export function useAgentReadinessCheck(options: UseAgentReadinessCheckOptions) {
         try {
           const healthResult = await ipcBridge.acpConversation.checkAgentHealth.invoke({
             backend: agent.backend,
+            // Honour a user-specified CLI path so an agent installed outside
+            // `$PATH` reports ready once the user points AionUi at its binary.
+            cli_path: getAgentCliPath(agent.backend),
           });
           const latency = Date.now() - startTime;
 

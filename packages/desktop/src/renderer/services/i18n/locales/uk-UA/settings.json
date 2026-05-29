@@ -808,7 +808,13 @@
     "customAgents": "Власні агенти",
     "custom": "Власний",
     "addCustomAgent": "Додати власного агента",
-    "customEmpty": "Власні агенти не налаштовані. Натисніть «Додати власного агента» для створення."
+    "customEmpty": "Власні агенти не налаштовані. Натисніть «Додати власного агента» для створення.",
+    "cliPathTitle": "Вказати шлях до CLI — {{name}}",
+    "cliPathTooltip": "Вказати шлях до CLI",
+    "cliPathConfigured": "Задано власний шлях до CLI",
+    "cliPathLabel": "Шлях до CLI",
+    "cliPathPlaceholder": "наприклад, /usr/local/bin/claude",
+    "cliPathHelp": "Повний шлях до виконуваного файлу агента. Залиште порожнім для автовизначення через PATH."
   },
   "remoteAgent": {
     "title": "Віддалені агенти",

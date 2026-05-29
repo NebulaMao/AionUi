@@ -903,7 +903,13 @@
     "customAgents": "自定义 Agents",
     "custom": "自定义",
     "addCustomAgent": "添加自定义 Agent",
-    "customEmpty": "暂无自定义 Agent，点击「添加自定义 Agent」创建。"
+    "customEmpty": "暂无自定义 Agent，点击「添加自定义 Agent」创建。",
+    "cliPathTitle": "设置 CLI 路径 — {{name}}",
+    "cliPathTooltip": "设置 CLI 路径",
+    "cliPathConfigured": "已设置自定义 CLI 路径",
+    "cliPathLabel": "CLI 路径",
+    "cliPathPlaceholder": "例如 /usr/local/bin/claude",
+    "cliPathHelp": "Agent 可执行文件的完整路径。留空则从 PATH 自动检测。"
   },
   "remoteAgent": {
     "title": "远程 Agent",

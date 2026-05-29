@@ -892,7 +892,13 @@
     "customAgents": "カスタムエージェント",
     "custom": "カスタム",
     "addCustomAgent": "カスタムエージェントを追加",
-    "customEmpty": "カスタムエージェントが設定されていません。「カスタムエージェントを追加」をクリックして作成してください。"
+    "customEmpty": "カスタムエージェントが設定されていません。「カスタムエージェントを追加」をクリックして作成してください。",
+    "cliPathTitle": "CLI パスを設定 — {{name}}",
+    "cliPathTooltip": "CLI パスを設定",
+    "cliPathConfigured": "カスタム CLI パスが設定されています",
+    "cliPathLabel": "CLI パス",
+    "cliPathPlaceholder": "例: /usr/local/bin/claude",
+    "cliPathHelp": "エージェントの実行ファイルへのフルパス。空欄の場合は PATH から自動検出します。"
   },
   "remoteAgent": {
     "title": "リモートエージェント",
