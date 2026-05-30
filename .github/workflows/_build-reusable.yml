@@ -31,6 +31,10 @@ on:
         description: 'AionCore repo to build the core from (owner/name). Only used when aioncore_ref is set.'
         type: string
         default: 'iOfficeAI/AionCore'
+      core_build_fast:
+        description: 'Faster aioncore source build (opt-level=1, high codegen-units). False = full release optimization.'
+        type: boolean
+        default: true
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -338,6 +342,19 @@ jobs:
             windows-*) echo "AIONCORE_RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV" ;;
             *)         echo "AIONCORE_RUSTFLAGS=" >> "$GITHUB_ENV" ;;
           esac
+          # Faster builds for the patch-test workflow: aioncore only orchestrates
+          # subprocesses, so trading runtime optimization for compile speed is a
+          # free win. Overrides the (default opt-level=3) release profile.
+          if [[ "${{ inputs.core_build_fast }}" == "true" ]]; then
+            {
+              echo "CARGO_PROFILE_RELEASE_OPT_LEVEL=1"
+              echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=256"
+              echo "CARGO_PROFILE_RELEASE_LTO=false"
+              echo "CARGO_PROFILE_RELEASE_DEBUG=false"
+              echo "CARGO_PROFILE_RELEASE_INCREMENTAL=false"
+            } >> "$GITHUB_ENV"
+            echo "aioncore fast build: opt-level=1, codegen-units=256"
+          fi
           echo "aioncore source build → target=$TRIPLE cross=$CROSS"
 
       - name: Checkout AionCore source
@@ -399,6 +416,9 @@ jobs:
         with:
           workspaces: aioncore-src
           shared-key: aioncore-${{ matrix.platform }}
+          # Keep the dependency cache even when a build fails so the retry is warm.
+          cache-on-failure: true
+          cache-all-crates: true
 
       - name: Fix MSVC linker (remove Git's link.exe)
         if: inputs.aioncore_ref != '' && startsWith(matrix.platform, 'windows')
@@ -407,7 +427,9 @@ jobs:
 
       - name: Install cross (Linux arm64)
         if: inputs.aioncore_ref != '' && matrix.platform == 'linux-arm64'
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
       - name: Build aioncore from source
         if: inputs.aioncore_ref != ''

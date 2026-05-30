@@ -40,6 +40,11 @@ on:
         required: false
         type: string
         default: 'iOfficeAI/AionCore'
+      core_build_fast:
+        description: 'Faster aioncore source build: opt-level=1 + high codegen-units. Uncheck for a fully optimized release-grade core.'
+        required: false
+        type: boolean
+        default: true
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -96,4 +101,5 @@ jobs:
       upload_installers_only: true
       aioncore_ref: ${{ inputs.aioncore_ref }}
       aioncore_repo: ${{ inputs.aioncore_repo }}
+      core_build_fast: ${{ inputs.core_build_fast }}
     secrets: inherit
