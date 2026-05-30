@@ -90,6 +90,10 @@ export function buildAgentConversationParams(input: BuildAgentConversationInput)
     extra.preset_context = preset_resources?.rules;
     if (type === 'acp') {
       extra.backend = effectivePresetType as string;
+      // Forward the user-specified CLI path override for preset assistants too.
+      // Without this it was only wired into the non-preset ACP branch below, so
+      // preset conversations fell back to the backend's $PATH binary.
+      if (cli_path) extra.cli_path = cli_path;
     }
   } else if (type === 'remote') {
     extra.remote_agent_id = custom_agent_id;
