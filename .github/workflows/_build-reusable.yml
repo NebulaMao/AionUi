@@ -23,6 +23,14 @@ on:
         description: 'Only upload primary installers (exe/msi/dmg/deb), skip zip/yml/blockmap'
         type: boolean
         default: false
+      aioncore_ref:
+        description: 'AionCore git ref (branch/tag/sha) to compile the core from source. Empty = bundle the pinned release.'
+        type: string
+        default: ''
+      aioncore_repo:
+        description: 'AionCore repo to build the core from (owner/name). Only used when aioncore_ref is set.'
+        type: string
+        default: 'iOfficeAI/AionCore'
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -304,12 +312,136 @@ jobs:
           MSVS_VERSION: 2022
           GYP_MSVS_VERSION: 2022
 
+      # ─── Compile aioncore from source (optional) ─────────────────────────
+      # When `aioncore_ref` is provided, build the aioncore backend from the
+      # AionCore repo at that ref and bundle it instead of downloading a
+      # published release. Mirrors AionCore's own release.yml build recipe so
+      # the resulting binary matches what a real release would ship. The built
+      # binary path is exported as AIONUI_BACKEND_BINARY, which prepareAioncore
+      # consumes (highest-priority source) — see prepare-aioncore.js.
+      - name: Resolve aioncore build target
+        if: inputs.aioncore_ref != ''
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            macos-arm64)   TRIPLE=aarch64-apple-darwin;      CROSS=false ;;
+            macos-x64)     TRIPLE=x86_64-apple-darwin;       CROSS=false ;;
+            windows-x64)   TRIPLE=x86_64-pc-windows-msvc;    CROSS=false ;;
+            windows-arm64) TRIPLE=aarch64-pc-windows-msvc;   CROSS=false ;;
+            linux-x64)     TRIPLE=x86_64-unknown-linux-gnu;  CROSS=false ;;
+            linux-arm64)   TRIPLE=aarch64-unknown-linux-gnu; CROSS=true  ;;
+            *) echo "::error::Unsupported platform for aioncore source build: ${{ matrix.platform }}"; exit 1 ;;
+          esac
+          echo "AIONCORE_TARGET=$TRIPLE" >> "$GITHUB_ENV"
+          echo "AIONCORE_USE_CROSS=$CROSS" >> "$GITHUB_ENV"
+          case "${{ matrix.platform }}" in
+            windows-*) echo "AIONCORE_RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV" ;;
+            *)         echo "AIONCORE_RUSTFLAGS=" >> "$GITHUB_ENV" ;;
+          esac
+          echo "aioncore source build → target=$TRIPLE cross=$CROSS"
+
+      - name: Checkout AionCore source
+        if: inputs.aioncore_ref != ''
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.aioncore_repo }}
+          ref: ${{ inputs.aioncore_ref }}
+          path: aioncore-src
+
+      # Apply AionUi-bundled patches to the AionCore checkout so unreleased
+      # backend fixes can ship without owning an AionCore branch. Patches live
+      # in `aioncore-patches/*.patch` (authored against the pinned release tag).
+      # Already-applied patches are skipped; real conflicts fail the build.
+      - name: Apply aioncore patches
+        if: inputs.aioncore_ref != ''
+        shell: bash
+        working-directory: aioncore-src
+        run: |
+          set -euo pipefail
+          PATCH_DIR="$GITHUB_WORKSPACE/aioncore-patches"
+          if [[ ! -d "$PATCH_DIR" ]]; then
+            echo "No aioncore-patches/ directory — building ${{ inputs.aioncore_ref }} unpatched"
+            exit 0
+          fi
+          shopt -s nullglob
+          patches=("$PATCH_DIR"/*.patch)
+          if (( ${#patches[@]} == 0 )); then
+            echo "No *.patch files in aioncore-patches/ — building unpatched"
+            exit 0
+          fi
+          for p in "${patches[@]}"; do
+            name="$(basename "$p")"
+            echo "::group::Applying ${name}"
+            if git apply --check "$p" 2>/dev/null; then
+              git apply --verbose "$p"
+              echo "applied: ${name}"
+            elif git apply --reverse --check "$p" 2>/dev/null; then
+              echo "already applied, skipping: ${name}"
+            else
+              echo "::error::patch ${name} does not apply cleanly against ${{ inputs.aioncore_ref }}; attempting 3-way merge"
+              git apply --3way "$p" || { echo "::error::3-way merge failed for ${name}"; exit 1; }
+            fi
+            echo "::endgroup::"
+          done
+          echo "Patched aioncore tree:"
+          git -c core.pager=cat diff --stat
+
+      - name: Setup Rust toolchain
+        if: inputs.aioncore_ref != ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+          targets: ${{ env.AIONCORE_TARGET }}
+
+      - name: Cache cargo (aioncore)
+        if: inputs.aioncore_ref != ''
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: aioncore-src
+          shared-key: aioncore-${{ matrix.platform }}
+
+      - name: Fix MSVC linker (remove Git's link.exe)
+        if: inputs.aioncore_ref != '' && startsWith(matrix.platform, 'windows')
+        shell: pwsh
+        run: Remove-Item 'C:\Program Files\Git\usr\bin\link.exe' -Force -ErrorAction SilentlyContinue
+
+      - name: Install cross (Linux arm64)
+        if: inputs.aioncore_ref != '' && matrix.platform == 'linux-arm64'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build aioncore from source
+        if: inputs.aioncore_ref != ''
+        shell: bash
+        working-directory: aioncore-src
+        env:
+          AIONUI_EMBED_BUN: '1'
+          BUN_VARIANT: default
+          CARGO_TERM_COLOR: always
+          CARGO_HTTP_TIMEOUT: '600'
+          CARGO_NET_RETRY: '10'
+          RUSTFLAGS: ${{ env.AIONCORE_RUSTFLAGS }}
+        run: |
+          set -euo pipefail
+          if [[ "${AIONCORE_USE_CROSS}" == "true" ]]; then
+            cross build --release --target "${AIONCORE_TARGET}" -p aionui-app
+          else
+            cargo build --release --target "${AIONCORE_TARGET}" -p aionui-app
+          fi
+          BIN_NAME=aioncore
+          [[ "${{ matrix.platform }}" == windows-* ]] && BIN_NAME=aioncore.exe
+          BIN_PATH="$PWD/target/${AIONCORE_TARGET}/release/${BIN_NAME}"
+          test -f "$BIN_PATH" || { echo "::error::built aioncore not found at ${BIN_PATH}"; exit 1; }
+          echo "AIONUI_BACKEND_BINARY=${BIN_PATH}" >> "$GITHUB_ENV"
+          echo "Built aioncore → ${BIN_PATH}"
+
       - name: Prepare aioncore binary
         shell: bash
         run: node scripts/prepareAioncore.js
         env:
-          # Version is pinned in repo-root package.json (aioncoreVersion).
-          # Set AIONUI_BACKEND_VERSION here only to override for ad-hoc builds.
+          # When AIONUI_BACKEND_BINARY is set (source build above) it wins and
+          # the download is skipped. Otherwise the version pinned in repo-root
+          # package.json (aioncoreVersion) is downloaded; set
+          # AIONUI_BACKEND_VERSION only to override for ad-hoc release builds.
           AIONUI_BACKEND_ARCH: ${{ matrix.arch }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

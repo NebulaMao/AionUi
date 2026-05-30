@@ -9,6 +9,8 @@
  *  3. 'latest' (fallback; not recommended for reproducible builds)
  *
  * Environment variables:
+ *  - AIONUI_BACKEND_BINARY: explicit prebuilt binary path (skips download;
+ *    used by the Manual Build workflow when compiling aioncore from source)
  *  - AIONUI_BACKEND_VERSION: override the pinned version
  *  - AIONUI_BACKEND_ARCH: target architecture (default: process.arch)
  *  - GH_TOKEN / GITHUB_TOKEN: GitHub API token (for rate limiting)

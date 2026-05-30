@@ -30,6 +30,16 @@ on:
         required: false
         type: boolean
         default: false
+      aioncore_ref:
+        description: 'AionCore git ref to compile the core from source, with aioncore-patches/*.patch applied. Use the pinned tag (e.g. v0.1.16) to ship "release + local patches". Leave empty to download the pinned release as-is.'
+        required: false
+        type: string
+        default: ''
+      aioncore_repo:
+        description: 'AionCore repo to build the core from (owner/name). Only used when aioncore_ref is set.'
+        required: false
+        type: string
+        default: 'iOfficeAI/AionCore'
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -84,4 +94,6 @@ jobs:
       skip_code_quality: ${{ inputs.skip_code_quality }}
       append_commit_hash: true
       upload_installers_only: true
+      aioncore_ref: ${{ inputs.aioncore_ref }}
+      aioncore_repo: ${{ inputs.aioncore_repo }}
     secrets: inherit

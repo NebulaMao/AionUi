@@ -2,6 +2,8 @@
  * Prepare aioncore binary for packaging.
  *
  * Resolution order:
+ *  0. AIONUI_BACKEND_BINARY env — an explicit prebuilt binary path (e.g. one
+ *     compiled from source in CI). Highest priority; skips the download.
  *  1. GitHub release download (requires version or defaults to "latest")
  *
  * Output: {projectRoot}/resources/bundled-aioncore/{platform}-{arch}/aioncore[.exe]
@@ -199,6 +201,36 @@ function prepareAioncore(options) {
   const { projectRoot, platform, arch, version = 'latest' } = options;
   const runtimeKey = `${platform}-${arch}`;
 
+  const targetDir = path.join(projectRoot, 'resources', 'bundled-aioncore', runtimeKey);
+  const binaryName = getBinaryName(platform);
+  const targetBinaryPath = path.join(targetDir, binaryName);
+
+  // 0. Explicit prebuilt binary (e.g. compiled from source in CI via the
+  //    Manual Build workflow). Highest priority — bypasses the GitHub release
+  //    download entirely so unreleased aioncore changes can be bundled/tested.
+  const explicitBinary = process.env.AIONUI_BACKEND_BINARY;
+  if (explicitBinary) {
+    if (!fs.existsSync(explicitBinary)) {
+      throw new Error(`AIONUI_BACKEND_BINARY is set but no file exists at: ${explicitBinary}`);
+    }
+    console.log(`Preparing aioncore for ${runtimeKey} from AIONUI_BACKEND_BINARY`);
+    removeDirectorySafe(targetDir);
+    ensureDirectory(targetDir);
+    copyFileSafe(explicitBinary, targetBinaryPath);
+    ensureExecutableMode(targetBinaryPath);
+    writeJson(path.join(targetDir, 'manifest.json'), {
+      platform,
+      arch,
+      version: process.env.AIONUI_BACKEND_VERSION || 'source',
+      generatedAt: new Date().toISOString(),
+      sourceType: 'local-binary',
+      source: { path: explicitBinary },
+      files: [binaryName],
+    });
+    console.log(`  Bundled aioncore prepared: resources/bundled-aioncore/${runtimeKey}/${binaryName} [source=local-binary]`);
+    return { prepared: true, dir: targetDir, sourceType: 'local-binary' };
+  }
+
   // Resolve the actual version tag — asset filenames include the tag
   let tag;
   if (version === 'latest') {
@@ -211,10 +243,6 @@ function prepareAioncore(options) {
   } else {
     tag = version.startsWith('v') ? version : `v${version}`;
   }
-
-  const targetDir = path.join(projectRoot, 'resources', 'bundled-aioncore', runtimeKey);
-  const binaryName = getBinaryName(platform);
-  const targetBinaryPath = path.join(targetDir, binaryName);
 
   console.log(`Preparing aioncore for ${runtimeKey} (version: ${tag})`);
 

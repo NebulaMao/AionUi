@@ -1,0 +1,75 @@
+diff --git a/crates/aionui-ai-agent/src/capability/cli_process/spawn_sdk.rs b/crates/aionui-ai-agent/src/capability/cli_process/spawn_sdk.rs
+index 9fc9ae3..6ff7e72 100644
+--- a/crates/aionui-ai-agent/src/capability/cli_process/spawn_sdk.rs
++++ b/crates/aionui-ai-agent/src/capability/cli_process/spawn_sdk.rs
+@@ -25,10 +25,15 @@ impl CliAgentProcess {
+     /// - stderr buffering
+     /// - Process exit monitoring
+     pub async fn spawn_for_sdk(config: CommandSpec, data_dir: &Path) -> Result<Self, AppError> {
++        // A user-specified CLI path override arrives as an explicit
++        // `CLAUDE_CODE_EXECUTABLE` entry in `config.env` (injected by the ACP
++        // factory). When present it must win, so skip the `$PATH` fallback in
++        // `agent_spawn_env` instead of letting it overwrite the override.
++        let has_explicit_claude_exec = config.env.iter().any(|e| e.name == "CLAUDE_CODE_EXECUTABLE");
+         let mut cmd = CmdBuilder::new(&config.command);
+         cmd.args(&config.args)
+             .envs(config.env.iter().map(|e| (&e.name, &e.value)))
+-            .envs(Self::agent_spawn_env(data_dir))
++            .envs(Self::agent_spawn_env(data_dir, has_explicit_claude_exec))
+             .stdin(std::process::Stdio::piped())
+             .stdout(std::process::Stdio::piped())
+             .stderr(std::process::Stdio::piped());
+@@ -122,7 +127,11 @@ impl CliAgentProcess {
+     /// - Set BUN_INSTALL_CACHE_DIR / BUN_TMPDIR to stable paths under
+     ///   the backend's `AppConfig.data_dir`
+     /// - Set CLAUDE_CODE_EXECUTABLE so claude-agent-sdk finds the CLI
+-    fn agent_spawn_env(data_dir: &Path) -> Vec<(String, String)> {
++    ///
++    /// When `skip_claude_exec` is true the caller already supplied an explicit
++    /// `CLAUDE_CODE_EXECUTABLE` (a user-configured CLI path override); the
++    /// `$PATH` auto-detection is then skipped so it cannot clobber the override.
++    fn agent_spawn_env(data_dir: &Path, skip_claude_exec: bool) -> Vec<(String, String)> {
+         let bun_cache = data_dir.join("bun-cache");
+         let bun_tmp = data_dir.join("bun-tmp");
+ 
+@@ -135,8 +144,10 @@ impl CliAgentProcess {
+         // `aionui_runtime::enhance_process_path` during startup; children
+         // inherit it automatically. No per-spawn injection needed.
+ 
+-        if let Some(claude_path) = Self::find_native_claude() {
+-            env.push(("CLAUDE_CODE_EXECUTABLE".into(), claude_path));
++        if !skip_claude_exec {
++            if let Some(claude_path) = Self::find_native_claude() {
++                env.push(("CLAUDE_CODE_EXECUTABLE".into(), claude_path));
++            }
+         }
+ 
+         env
+diff --git a/crates/aionui-ai-agent/src/factory/acp.rs b/crates/aionui-ai-agent/src/factory/acp.rs
+index e4a1c31..c9f06b0 100644
+--- a/crates/aionui-ai-agent/src/factory/acp.rs
++++ b/crates/aionui-ai-agent/src/factory/acp.rs
+@@ -110,6 +110,23 @@ pub(super) async fn build(
+         }
+     }
+ 
++    // User-specified CLI path override (Settings → Agents, persisted as
++    // `conversation.extra.cli_path`). The Claude adapter locates its binary via
++    // `CLAUDE_CODE_EXECUTABLE`; inject it here so the override wins over the
++    // `$PATH` auto-detection performed in `agent_spawn_env`. Other ACP backends
++    // expose no equivalent single-binary env hook, so the override is honoured
++    // for Claude only — see `find_native_claude` in `cli_process/spawn_sdk.rs`.
++    if meta.backend.as_deref() == Some("claude") {
++        if let Some(cli_path) = config.cli_path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
++            env.retain(|e| e.name != "CLAUDE_CODE_EXECUTABLE");
++            env.push(aionui_common::EnvVar {
++                name: "CLAUDE_CODE_EXECUTABLE".into(),
++                value: cli_path.to_owned(),
++            });
++            tracing::info!(cli_path, "cli_path override: CLAUDE_CODE_EXECUTABLE set from user config");
++        }
++    }
++
+     let command_spec = CommandSpec {
+         command,
+         args,
