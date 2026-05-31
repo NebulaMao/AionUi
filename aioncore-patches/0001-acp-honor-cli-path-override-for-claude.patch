@@ -46,30 +46,148 @@ index 9fc9ae3..6ff7e72 100644
  
          env
 diff --git a/crates/aionui-ai-agent/src/factory/acp.rs b/crates/aionui-ai-agent/src/factory/acp.rs
-index e4a1c31..c9f06b0 100644
+index e4a1c31..94df858 100644
 --- a/crates/aionui-ai-agent/src/factory/acp.rs
 +++ b/crates/aionui-ai-agent/src/factory/acp.rs
-@@ -110,6 +110,23 @@ pub(super) async fn build(
+@@ -10,6 +10,7 @@ use agent_client_protocol::schema::{EnvVariable, HttpHeader, McpServer, McpServe
+ use aionui_api_types::{AcpBuildExtra, SessionMcpServer, SessionMcpTransport};
+ use aionui_common::{AppError, CommandSpec};
+ use aionui_db::IMcpServerRepository;
++use aionui_db::IClientPreferenceRepository;
+ use aionui_db::models::McpServerRow;
+ use aionui_mcp::{AcpMcpCapabilities, parse_acp_mcp_capabilities};
+ use aionui_runtime::resolve_command_path;
+@@ -110,6 +111,35 @@ pub(super) async fn build(
          }
      }
  
-+    // User-specified CLI path override (Settings → Agents, persisted as
-+    // `conversation.extra.cli_path`). The Claude adapter locates its binary via
-+    // `CLAUDE_CODE_EXECUTABLE`; inject it here so the override wins over the
-+    // `$PATH` auto-detection performed in `agent_spawn_env`. Other ACP backends
-+    // expose no equivalent single-binary env hook, so the override is honoured
-+    // for Claude only — see `find_native_claude` in `cli_process/spawn_sdk.rs`.
++    // User-specified CLI path override (Settings → Agents). The Claude adapter
++    // locates its binary via `CLAUDE_CODE_EXECUTABLE`; inject it here so the
++    // override wins over the `$PATH` auto-detection performed in
++    // `agent_spawn_env`. Other ACP backends expose no equivalent single-binary
++    // env hook, so the override is honoured for Claude only — see
++    // `find_native_claude` in `cli_process/spawn_sdk.rs`.
++    //
++    // Precedence: an explicit per-conversation `extra.cli_path` wins; otherwise
++    // fall back to the global `acp.config[key].cli_path` preference. The global
++    // fallback is what makes the override apply to spawns that never run through
++    // the desktop create-flow — channels, cron, and team teammates all build
++    // here too but carry no explicit `cli_path`.
 +    if meta.backend.as_deref() == Some("claude") {
-+        if let Some(cli_path) = config.cli_path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
++        let explicit = config.cli_path.as_deref().map(str::trim).filter(|p| !p.is_empty());
++        let effective_cli_path = match explicit {
++            Some(p) => Some(p.to_owned()),
++            None => resolve_global_cli_path(&deps, config.agent_id.as_deref(), config.backend.as_deref()).await,
++        };
++        if let Some(cli_path) = effective_cli_path {
 +            env.retain(|e| e.name != "CLAUDE_CODE_EXECUTABLE");
 +            env.push(aionui_common::EnvVar {
 +                name: "CLAUDE_CODE_EXECUTABLE".into(),
-+                value: cli_path.to_owned(),
++                value: cli_path.clone(),
 +            });
-+            tracing::info!(cli_path, "cli_path override: CLAUDE_CODE_EXECUTABLE set from user config");
++            let source = if explicit.is_some() { "conversation" } else { "global acp.config" };
++            tracing::info!(cli_path, source, "cli_path override: CLAUDE_CODE_EXECUTABLE set");
 +        }
 +    }
 +
      let command_spec = CommandSpec {
          command,
          args,
+@@ -221,6 +251,34 @@ pub(super) async fn build(
+     Ok(instance)
+ }
+ 
++/// Resolve the global user CLI-path override (`acp.config[key].cli_path`) from
++/// `client_preferences` — the same value the desktop UI persists via
++/// Settings → Agents.
++///
++/// Mirrors the UI's `getAgentCliPath` key resolution: a row-scoped custom agent
++/// is keyed by its `agent_id`, builtin vendors by `backend`. Tries the agent-id
++/// key first, then the backend key. Returns `None` on any miss (no repo, no
++/// pref, malformed JSON, empty/whitespace path) so the caller falls back to the
++/// `$PATH` binary.
++async fn resolve_global_cli_path(deps: &AgentFactoryDeps, agent_id: Option<&str>, backend: Option<&str>) -> Option<String> {
++    let repo = deps.client_pref_repo.as_ref()?;
++    let prefs = repo.get_by_keys(&["acp.config"]).await.ok()?;
++    let pref = prefs.into_iter().next()?;
++    let parsed: serde_json::Value = serde_json::from_str(&pref.value).ok()?;
++    for key in [agent_id, backend].into_iter().flatten() {
++        if let Some(cli_path) = parsed
++            .get(key)
++            .and_then(|v| v.get("cli_path"))
++            .and_then(|v| v.as_str())
++            .map(str::trim)
++            .filter(|p| !p.is_empty())
++        {
++            return Some(cli_path.to_owned());
++        }
++    }
++    None
++}
++
+ /// Load the operator's enabled MCP servers from the DB, log+skip any rows
+ /// whose `transport_config` JSON fails to parse (better to start without one
+ /// MCP tool than fail the whole session), and return them in SDK shape ready
+diff --git a/crates/aionui-ai-agent/src/factory/mod.rs b/crates/aionui-ai-agent/src/factory/mod.rs
+index 67e4e09..d30fccd 100644
+--- a/crates/aionui-ai-agent/src/factory/mod.rs
++++ b/crates/aionui-ai-agent/src/factory/mod.rs
+@@ -12,7 +12,7 @@ use std::sync::Arc;
+ 
+ use aionui_api_types::GuideMcpConfig;
+ use aionui_common::{AgentType, AppError};
+-use aionui_db::{IMcpServerRepository, IProviderRepository, IRemoteAgentRepository};
++use aionui_db::{IClientPreferenceRepository, IMcpServerRepository, IProviderRepository, IRemoteAgentRepository};
+ use futures_util::FutureExt;
+ 
+ use crate::agent_task::AgentInstance;
+@@ -44,6 +44,13 @@ pub struct AgentFactoryDeps {
+     /// inject enabled servers into `session/new` (ELECTRON-1JG fix).
+     /// `None` for tests/composition paths that do not need MCP injection.
+     pub mcp_server_repo: Option<Arc<dyn IMcpServerRepository>>,
++    /// Client-preferences repository. Used by the ACP factory to resolve the
++    /// global `acp.config[backend].cli_path` override as a fallback when a
++    /// conversation does not carry an explicit `extra.cli_path`. This makes the
++    /// user-set CLI binary apply to *every* claude spawn (UI, channels, cron,
++    /// team), not just conversations created through the desktop create-flow.
++    /// `None` for tests/composition paths that do not need the override.
++    pub client_pref_repo: Option<Arc<dyn IClientPreferenceRepository>>,
+ }
+ 
+ /// Build a production agent factory that dispatches to concrete agent types.
+diff --git a/crates/aionui-ai-agent/tests/factory_provider_integration.rs b/crates/aionui-ai-agent/tests/factory_provider_integration.rs
+index 71c29e3..ee50761 100644
+--- a/crates/aionui-ai-agent/tests/factory_provider_integration.rs
++++ b/crates/aionui-ai-agent/tests/factory_provider_integration.rs
+@@ -76,6 +76,7 @@ fn make_factory(
+         backend_binary_path: Arc::new(PathBuf::from("/tmp/aionrs-test/aioncore")),
+         guide_mcp_config: None,
+         mcp_server_repo: None,
++        client_pref_repo: None,
+     })
+ }
+ 
+diff --git a/crates/aionui-app/src/services.rs b/crates/aionui-app/src/services.rs
+index 436de41..c79c8d8 100644
+--- a/crates/aionui-app/src/services.rs
++++ b/crates/aionui-app/src/services.rs
+@@ -12,8 +12,9 @@ use aionui_auth::{CookieConfig, JwtService, QrTokenStore, resolve_jwt_secret};
+ use aionui_common::OnConversationDelete;
+ use aionui_db::{
+     Database, IAcpSessionRepository, IAgentMetadataRepository, IConversationRepository, IMcpServerRepository,
+-    IUserRepository, SqliteAcpSessionRepository, SqliteAgentMetadataRepository, SqliteConversationRepository,
+-    SqliteMcpServerRepository, SqliteProviderRepository, SqliteRemoteAgentRepository, SqliteUserRepository,
++    IUserRepository, SqliteAcpSessionRepository, SqliteAgentMetadataRepository, SqliteClientPreferenceRepository,
++    SqliteConversationRepository, SqliteMcpServerRepository, SqliteProviderRepository, SqliteRemoteAgentRepository,
++    SqliteUserRepository,
+ };
+ use aionui_realtime::{BroadcastEventBus, WebSocketManager};
+ use aionui_team::GuideMcpServer;
+@@ -171,6 +172,7 @@ impl AppServices {
+             backend_binary_path: backend_binary_path.clone(),
+             guide_mcp_config: guide_mcp_config.clone(),
+             mcp_server_repo: Some(mcp_server_repo),
++            client_pref_repo: Some(Arc::new(SqliteClientPreferenceRepository::new(database.pool().clone()))),
+         });
+ 
+         // Agent factory is now wired. Future extension/custom agents

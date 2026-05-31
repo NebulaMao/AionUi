@@ -32,4 +32,4 @@ A patch here is temporary. Once its change lands in an AionCore release:
 
 | File | Purpose |
 | ---- | ------- |
-| `0001-acp-honor-cli-path-override-for-claude.patch` | Make the ACP factory inject a user-configured `cli_path` (`conversation.extra.cli_path`) as `CLAUDE_CODE_EXECUTABLE`, and stop `spawn_sdk` from overwriting it with `$PATH` auto-detection. Lets the Settings → Agents CLI-path override actually launch the chosen Claude binary. |
+| `0001-acp-honor-cli-path-override-for-claude.patch` | Make the ACP factory inject a user-configured `cli_path` as `CLAUDE_CODE_EXECUTABLE`, and stop `spawn_sdk` from overwriting it with `$PATH` auto-detection. An explicit `conversation.extra.cli_path` wins; otherwise the factory falls back to the **global** `acp.config[key].cli_path` preference (`client_preferences`). The global fallback is what makes the Settings → Agents CLI-path override apply to *every* Claude spawn — UI conversations, **channels (Telegram/WeCom/Lark/…)**, cron jobs, and team teammates — not just conversations created through the desktop create-flow. Threads a `client_pref_repo` into `AgentFactoryDeps`. |
